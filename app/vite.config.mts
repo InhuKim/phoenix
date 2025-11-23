@@ -49,10 +49,11 @@ export default defineConfig(() => {
     plugins,
     publicDir: resolve(__dirname, "static"),
     preview: {
-      port: 6006,
+      port: 5173,
     },
     server: {
-      open: "http://localhost:6006",
+      port: 5173,
+      open: "http://localhost:5173",
     },
     resolve: {
       alias: {

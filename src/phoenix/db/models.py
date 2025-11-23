@@ -1746,6 +1746,41 @@ class PromptLabel(HasId):
     )
 
 
+class PromptFolder(HasId):
+    __tablename__ = "prompt_folders"
+    name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    description: Mapped[Optional[str]]
+    color: Mapped[str] = mapped_column(String, nullable=False, default="#5bdbff")
+    parent_folder_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("prompt_folders.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(UtcTimeStamp, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        UtcTimeStamp, server_default=func.now(), onupdate=func.now()
+    )
+
+    prompts: Mapped[list["Prompt"]] = relationship(
+        "Prompt",
+        back_populates="folder",
+        uselist=True,
+    )
+    parent_folder: Mapped[Optional["PromptFolder"]] = relationship(
+        "PromptFolder",
+        remote_side="PromptFolder.id",
+        back_populates="subfolders",
+        foreign_keys=[parent_folder_id],
+    )
+    subfolders: Mapped[list["PromptFolder"]] = relationship(
+        "PromptFolder",
+        back_populates="parent_folder",
+        cascade="all, delete-orphan",
+        uselist=True,
+        foreign_keys="PromptFolder.parent_folder_id",
+    )
+
+
 class Prompt(HasId):
     __tablename__ = "prompts"
     source_prompt_id: Mapped[Optional[int]] = mapped_column(
@@ -1753,12 +1788,22 @@ class Prompt(HasId):
         index=True,
         nullable=True,
     )
+    folder_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("prompt_folders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[Identifier] = mapped_column(_Identifier, unique=True, index=True, nullable=False)
     description: Mapped[Optional[str]]
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata")
     created_at: Mapped[datetime] = mapped_column(UtcTimeStamp, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         UtcTimeStamp, server_default=func.now(), onupdate=func.now()
+    )
+
+    folder: Mapped[Optional["PromptFolder"]] = relationship(
+        "PromptFolder",
+        back_populates="prompts",
     )
 
     prompts_prompt_labels: Mapped[list["PromptPromptLabel"]] = relationship(

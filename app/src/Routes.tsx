@@ -82,6 +82,8 @@ import {
   PromptLoaderData,
   promptsLoader,
   PromptsPage,
+  PromptFolderPage,
+  promptFolderLoader,
   resetPasswordLoader,
   ResetPasswordPage,
   ResetPasswordWithTokenPage,
@@ -254,6 +256,14 @@ const router = createBrowserRouter(
             }}
           >
             <Route index element={<PromptsPage />} loader={promptsLoader} />
+            <Route
+              path="folders/:folderId"
+              element={<PromptFolderPage />}
+              loader={promptFolderLoader}
+              handle={{
+                crumb: () => "Folder",
+              }}
+            />
             <Route
               path=":promptId"
               loader={promptLoader}

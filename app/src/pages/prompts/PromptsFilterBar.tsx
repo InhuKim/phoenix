@@ -1,16 +1,21 @@
+import { useState } from "react";
+
 import {
+  Button,
   DebouncedSearch,
+  DialogTrigger,
   Flex,
   Icon,
   Icons,
-  LinkButton,
   View,
 } from "@phoenix/components";
 import { CanModify } from "@phoenix/components/auth";
 import { usePromptsFilterContext } from "@phoenix/pages/prompts/PromptsFilterProvider";
 import { PromptsLabelMenu } from "@phoenix/pages/prompts/PromptsLabelMenu";
 
-export const PromptsFilterBar = () => {
+import { CreateFolderDialog } from "./CreateFolderDialog";
+
+export function PromptsFilterBar() {
   const {
     setFilter,
     filter,
@@ -43,17 +48,23 @@ export const PromptsFilterBar = () => {
             onSelectionChange={setSelectedPromptLabelIds}
           />
           <CanModify>
-            <LinkButton
-              size="M"
-              leadingVisual={<Icon svg={<Icons.MessageSquareOutline />} />}
-              variant="primary"
-              to="/playground"
-            >
-              New Prompt
-            </LinkButton>
+            <DialogTrigger>
+              <Button
+                size="M"
+                leadingVisual={<Icon svg={<Icons.PlusOutline />} />}
+                variant="default"
+              >
+                New Folder
+              </Button>
+              <CreateFolderDialog
+                onCreated={() => {
+                  window.location.reload();
+                }}
+              />
+            </DialogTrigger>
           </CanModify>
         </Flex>
       </Flex>
     </View>
   );
-};
+}

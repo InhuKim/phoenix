@@ -10,6 +10,7 @@ import {
 export const promptsLoaderGql = graphql`
   query promptsLoaderQuery {
     ...PromptsTable_prompts
+    ...PromptFoldersList_folders
   }
 `;
 

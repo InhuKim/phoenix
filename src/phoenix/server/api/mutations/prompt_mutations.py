@@ -36,6 +36,7 @@ class CreateChatPromptInput:
     description: Optional[str] = None
     prompt_version: ChatPromptVersionInput
     metadata: Optional[strawberry.scalars.JSON] = None
+    folder_id: Optional[GlobalID] = None
 
 
 @strawberry.input
@@ -86,11 +87,21 @@ class PromptMutationMixin:
         except ValidationError as error:
             raise BadRequest(str(error))
         name = IdentifierModel.model_validate(str(input.name))
+
+        # Handle folder_id if provided
+        folder_id_int: Optional[int] = None
+        if input.folder_id is not None:
+            from phoenix.server.api.types.PromptFolder import PromptFolder
+            folder_id_int = from_global_id_with_expected_type(
+                global_id=input.folder_id, expected_type_name=PromptFolder.__name__
+            )
+
         prompt = models.Prompt(
             name=name,
             description=input.description,
             metadata_=input.metadata or {},
             prompt_versions=[prompt_version],
+            folder_id=folder_id_int,
         )
         async with info.context.db() as session:
             session.add(prompt)

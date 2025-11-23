@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 import strawberry
 from sqlalchemy import ColumnElement, String, and_, case, cast, func, select, text
-from sqlalchemy.orm import joinedload, load_only
+from sqlalchemy.orm import joinedload, load_only, selectinload
 from starlette.authentication import UnauthenticatedUser
 from strawberry import ID, UNSET
 from strawberry.relay import Connection, GlobalID, Node
@@ -92,6 +92,7 @@ from phoenix.server.api.types.Project import Project
 from phoenix.server.api.types.ProjectSession import ProjectSession
 from phoenix.server.api.types.ProjectTraceRetentionPolicy import ProjectTraceRetentionPolicy
 from phoenix.server.api.types.Prompt import Prompt
+from phoenix.server.api.types.PromptFolder import PromptFolder
 from phoenix.server.api.types.PromptLabel import PromptLabel
 from phoenix.server.api.types.PromptVersion import PromptVersion, to_gql_prompt_version
 from phoenix.server.api.types.PromptVersionTag import PromptVersionTag
@@ -1036,6 +1037,65 @@ class Query:
                 data=data,
                 args=args,
             )
+
+    @strawberry.field
+    async def prompt_folders(
+        self,
+        info: Info[Context, None],
+        first: Optional[int] = 50,
+        last: Optional[int] = UNSET,
+        after: Optional[CursorString] = UNSET,
+        before: Optional[CursorString] = UNSET,
+        parent_folder_id: Optional[GlobalID] = UNSET,
+    ) -> Connection[PromptFolder]:
+        args = ConnectionArgs(
+            first=first,
+            after=after if isinstance(after, CursorString) else None,
+            last=last,
+            before=before if isinstance(before, CursorString) else None,
+        )
+        stmt = select(models.PromptFolder)
+        # Filter by parent folder if specified
+        if parent_folder_id is not UNSET:
+            if parent_folder_id is None:
+                # Root folders only
+                stmt = stmt.where(models.PromptFolder.parent_folder_id.is_(None))
+            else:
+                # Folders under specific parent
+                folder_id = from_global_id_with_expected_type(
+                    global_id=parent_folder_id, expected_type_name="PromptFolder"
+                )
+                stmt = stmt.where(models.PromptFolder.parent_folder_id == folder_id)
+        stmt = stmt.order_by(models.PromptFolder.name).options(selectinload(models.PromptFolder.prompts))
+        async with info.context.db() as session:
+            folders = await session.stream_scalars(stmt)
+            data = [
+                PromptFolder.from_db(folder)
+                async for folder in folders
+            ]
+            return connection_from_list(
+                data=data,
+                args=args,
+            )
+
+    @strawberry.field
+    async def prompt_folder(
+        self,
+        info: Info[Context, None],
+        folder_id: GlobalID,
+    ) -> Optional[PromptFolder]:
+        folder_row_id = from_global_id_with_expected_type(
+            global_id=folder_id, expected_type_name="PromptFolder"
+        )
+        async with info.context.db() as session:
+            folder = await session.scalar(
+                select(models.PromptFolder)
+                .where(models.PromptFolder.id == folder_row_id)
+                .options(selectinload(models.PromptFolder.prompts))
+            )
+            if folder is None:
+                return None
+            return PromptFolder.from_db(folder)
 
     @strawberry.field
     async def dataset_labels(

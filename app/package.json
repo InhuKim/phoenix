@@ -96,6 +96,7 @@
     "babel-plugin-relay": "^20.1.1",
     "chromatic": "^11.29.0",
     "cpy-cli": "^5.0.0",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "7.0.1",
@@ -130,11 +131,11 @@
     "dev": "pnpm run dev:server & pnpm run dev:ui",
     "dev:offline": "pnpm run dev:server:offline & pnpm run build:static && pnpm run build:relay && vite",
     "dev:embeddings": "pnpm run dev:server:embeddings & pnpm run build:static && pnpm run build:relay && vite",
-    "dev:ui": "source ./.env && pnpm run build:static && pnpm run build:relay && vite",
-    "dev:server": "source ./.env && uv run --compile --with-requirements=../requirements/dev.txt phoenix --dev serve",
+    "dev:ui": "dotenv -e .env -- pnpm run build:static && pnpm run build:relay && vite",
+    "dev:server": "dotenv -e .env -- uv run --compile --with-requirements=../requirements/dev.txt phoenix --dev serve",
     "dev:server:offline": "python -m phoenix.server.main --dev serve",
     "prod": "pnpm run build:static && pnpm run build && pnpm run prod:server",
-    "prod:server": "source ./.env && uv run --compile --with-requirements=../requirements/dev.txt phoenix serve",
+    "prod:server": "dotenv -e .env -- uv run --compile --with-requirements=../requirements/dev.txt phoenix serve",
     "dev:server:embeddings": "pnpm dev:server --with-fixture=fashion_mnist",
     "dev:server:test": "node ./tests/utils/testServer.mjs",
     "dev:server:init": "pnpm dev:server --with-trace-fixtures=llama_index_rag --with-projects=SESSIONS-DEMO --force-fixture-ingestion",
@@ -149,7 +150,7 @@
     "prettier:check": "prettier --check './src/**/*'",
     "storybook": "storybook dev -p 6007",
     "build-storybook": "storybook build",
-    "chromatic": "source ./.env && npx chromatic"
+    "chromatic": "dotenv -e .env -- npx chromatic"
   },
   "engines": {
     "node": ">=22"

@@ -1,6 +1,6 @@
 import { Suspense, useCallback } from "react";
 import { graphql, useMutation } from "react-relay";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { Dialog, Loading } from "@phoenix/components";
 import {
@@ -62,6 +62,8 @@ export const UpsertPromptFromTemplateDialog = ({
   const notifySuccess = useNotifySuccess();
   const notifyError = useNotifyError();
   const store = usePlaygroundStore();
+  const [searchParams] = useSearchParams();
+  const folderId = searchParams.get("folderId");
   const [createPrompt, isCreatePending] =
     useMutation<UpsertPromptFromTemplateDialogCreateMutation>(graphql`
       mutation UpsertPromptFromTemplateDialogCreateMutation(
@@ -146,6 +148,7 @@ export const UpsertPromptFromTemplateDialog = ({
               ...promptInput,
               templateFormat,
             },
+            folderId: folderId || undefined,
           },
         },
         onCompleted: (response) => {
@@ -176,6 +179,7 @@ export const UpsertPromptFromTemplateDialog = ({
     },
     [
       createPrompt,
+      folderId,
       instanceId,
       navigate,
       notifyError,

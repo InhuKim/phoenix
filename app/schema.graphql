@@ -433,6 +433,7 @@ input CreateChatPromptInput {
   description: String = null
   promptVersion: ChatPromptVersionInput!
   metadata: JSON = null
+  folderId: ID = null
 }
 
 input CreateChatPromptVersionInput {
@@ -511,6 +512,13 @@ input CreateProjectTraceRetentionPolicyInput {
   cronExpression: CronExpression!
   rule: ProjectTraceRetentionRuleInput!
   addProjects: [ID!]
+}
+
+input CreatePromptFolderInput {
+  name: String!
+  description: String = null
+  color: String! = "#5bdbff"
+  parentFolderId: ID = null
 }
 
 input CreatePromptLabelInput {
@@ -908,6 +916,14 @@ type DeleteModelMutationPayload {
 
 input DeleteProjectTraceRetentionPolicyInput {
   id: ID!
+}
+
+input DeletePromptFolderInput {
+  folderId: ID!
+}
+
+type DeletePromptFolderMutationPayload {
+  query: Query!
 }
 
 input DeletePromptInput {
@@ -1799,6 +1815,11 @@ input ModelsInput {
   modelName: String = null
 }
 
+input MovePromptToFolderInput {
+  promptId: ID!
+  folderId: ID = null
+}
+
 type Mutation {
   createAnnotationConfig(input: CreateAnnotationConfigInput!): CreateAnnotationConfigPayload!
   updateAnnotationConfig(input: UpdateAnnotationConfigInput!): UpdateAnnotationConfigPayload!
@@ -1846,6 +1867,10 @@ type Mutation {
   createProjectTraceRetentionPolicy(input: CreateProjectTraceRetentionPolicyInput!): ProjectTraceRetentionPolicyMutationPayload!
   patchProjectTraceRetentionPolicy(input: PatchProjectTraceRetentionPolicyInput!): ProjectTraceRetentionPolicyMutationPayload!
   deleteProjectTraceRetentionPolicy(input: DeleteProjectTraceRetentionPolicyInput!): ProjectTraceRetentionPolicyMutationPayload!
+  createPromptFolder(input: CreatePromptFolderInput!): PromptFolder!
+  updatePromptFolder(input: UpdatePromptFolderInput!): PromptFolder!
+  deletePromptFolder(input: DeletePromptFolderInput!): DeletePromptFolderMutationPayload!
+  movePromptToFolder(input: MovePromptToFolderInput!): JSON!
   createChatPrompt(input: CreateChatPromptInput!): Prompt!
   createChatPromptVersion(input: CreateChatPromptVersionInput!): Prompt!
   deletePrompt(input: DeletePromptInput!): DeletePromptMutationPayload!
@@ -2330,6 +2355,38 @@ enum PromptFilterColumn {
   name
 }
 
+type PromptFolder implements Node {
+  """The Globally Unique ID of this object"""
+  id: ID!
+  name: String!
+  description: String
+  color: String!
+  parentFolderId: ID
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  prompts: [Prompt!]!
+  subfolders: [PromptFolder!]!
+  parentFolder: PromptFolder
+}
+
+"""A connection to a list of items."""
+type PromptFolderConnection {
+  """Pagination data for this connection"""
+  pageInfo: PageInfo!
+
+  """Contains the nodes in this connection"""
+  edges: [PromptFolderEdge!]!
+}
+
+"""An edge in a connection."""
+type PromptFolderEdge {
+  """A cursor for use in pagination"""
+  cursor: String!
+
+  """The item at the end of the edge"""
+  node: PromptFolder!
+}
+
 type PromptLabel implements Node {
   """The Globally Unique ID of this object"""
   id: ID!
@@ -2496,6 +2553,8 @@ type Query {
   viewer: User
   prompts(first: Int = 50, last: Int, after: String, before: String, filter: PromptFilter, labelIds: [ID!]): PromptConnection!
   promptLabels(first: Int = 50, last: Int, after: String, before: String): PromptLabelConnection!
+  promptFolders(first: Int = 50, last: Int, after: String, before: String, parentFolderId: ID): PromptFolderConnection!
+  promptFolder(folderId: ID!): PromptFolder
   datasetLabels(first: Int = 50, last: Int, after: String, before: String): DatasetLabelConnection!
   datasetSplits(first: Int = 50, last: Int, after: String, before: String): DatasetSplitConnection!
   annotationConfigs(first: Int = 50, last: Int = null, after: String = null, before: String = null): AnnotationConfigConnection!
@@ -3302,6 +3361,14 @@ input UpdateModelMutationInput {
 type UpdateModelMutationPayload {
   model: GenerativeModel!
   query: Query!
+}
+
+input UpdatePromptFolderInput {
+  folderId: ID!
+  name: String
+  description: String
+  color: String
+  parentFolderId: ID
 }
 
 type User implements Node {

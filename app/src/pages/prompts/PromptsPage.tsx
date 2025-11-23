@@ -10,6 +10,7 @@ import {
   PromptsLoaderType,
 } from "@phoenix/pages/prompts/promptsLoader";
 
+import { PromptFoldersList } from "./PromptFoldersList";
 import { PromptsTable } from "./PromptsTable";
 
 export function PromptsPage() {
@@ -21,6 +22,7 @@ export function PromptsPage() {
     <PromptsFilterProvider>
       <Flex direction="column" height="100%">
         <PromptsFilterBar />
+        <PromptFoldersList query={data} />
         <PromptsTable query={data} />
       </Flex>
     </PromptsFilterProvider>
