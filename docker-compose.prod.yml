@@ -9,6 +9,8 @@ services:
         # Mac Mini (Apple Silicon) 용 이미지 사용
         BASE_IMAGE: gcr.io/distroless/python3-debian12:nonroot-arm64
     container_name: nuri-phoenix
+    # nonroot 사용자 (distroless 이미지의 기본 사용자 UID:GID)
+    user: "65532:65532"
     restart: unless-stopped
     depends_on:
       db:
