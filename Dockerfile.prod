@@ -20,8 +20,11 @@ WORKDIR /phoenix
 # 프론트엔드 소스 코드 복사
 COPY ./app /phoenix/app
 
-# 의존성 설치 및 빌드
 # vite.config.mts에서 outDir: ../src/phoenix/server/static로 설정되어 있음
+# 빌드 출력 디렉토리를 미리 생성해야 함
+RUN mkdir -p /phoenix/src/phoenix/server/static
+
+# 의존성 설치 및 빌드
 WORKDIR /phoenix/app
 RUN npm i -g corepack && \
     corepack enable && \
