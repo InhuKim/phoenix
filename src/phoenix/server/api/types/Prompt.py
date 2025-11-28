@@ -1,6 +1,6 @@
 # Part of the Phoenix PromptHub feature set
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import strawberry
 from sqlalchemy import func, select
@@ -27,6 +27,9 @@ from .PromptVersion import (
     to_gql_prompt_version,
 )
 from .PromptVersionTag import PromptVersionTag
+
+if TYPE_CHECKING:
+    from .PromptFolder import PromptFolder
 
 
 @strawberry.type
@@ -212,3 +215,23 @@ class Prompt(Node):
                 .where(models.PromptPromptLabel.prompt_id == self.id)
             )
             return [PromptLabel(id=label.id, db_record=label) for label in labels]
+
+    @strawberry.field
+    async def folder(
+        self, info: Info[Context, None]
+    ) -> Optional[strawberry.LazyType["PromptFolder", "phoenix.server.api.types.PromptFolder"]]:
+        from .PromptFolder import PromptFolder
+
+        if self.db_record:
+            folder_id = self.db_record.folder_id
+        else:
+            folder_id = await info.context.data_loaders.prompt_fields.load(
+                (self.id, models.Prompt.folder_id),
+            )
+        if not folder_id:
+            return None
+        async with info.context.db() as session:
+            folder = await session.get(models.PromptFolder, folder_id)
+        if not folder:
+            return None
+        return PromptFolder(id=folder.id, db_record=folder)

@@ -46,9 +46,14 @@ export function PlaygroundTools(props: PlaygroundToolsProps) {
 
   const provider = instance.model.provider;
 
+  console.log('[PlaygroundTools] Provider:', provider, 'Supported:', isSupportedToolChoiceProvider(provider));
+
   if (!isSupportedToolChoiceProvider(provider)) {
+    console.log('[PlaygroundTools] Provider not supported, returning null');
     return null;
   }
+
+  console.log('[PlaygroundTools] Rendering tools UI');
 
   return (
     <Disclosure id="tools">

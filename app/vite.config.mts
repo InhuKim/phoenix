@@ -52,8 +52,19 @@ export default defineConfig(() => {
       port: 5173,
     },
     server: {
+      host: '0.0.0.0',
       port: 5173,
       open: "http://localhost:5173",
+      proxy: {
+        '/graphql': {
+          target: 'http://localhost:6006',
+          changeOrigin: true,
+        },
+        '/api': {
+          target: 'http://localhost:6006',
+          changeOrigin: true,
+        },
+      },
     },
     resolve: {
       alias: {

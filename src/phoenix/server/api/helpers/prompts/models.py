@@ -554,6 +554,7 @@ def normalize_tools(
         or model_provider is ModelProvider.DEEPSEEK
         or model_provider is ModelProvider.XAI
         or model_provider is ModelProvider.OLLAMA
+        or model_provider is ModelProvider.GOOGLE
     ):
         openai_tools = [OpenAIToolDefinition.model_validate(schema) for schema in schemas]
         tools = [_openai_to_prompt_tool(openai_tool) for openai_tool in openai_tools]
@@ -578,9 +579,14 @@ def normalize_tools(
             ans.tool_choice = OpenAIToolChoiceConversion.from_openai(tool_choice)  # type: ignore[arg-type]
         elif model_provider is ModelProvider.AWS:
             ans.tool_choice = AwsToolChoiceConversion.from_aws(tool_choice)  # type: ignore[arg-type]
-        elif model_provider is ModelProvider.ANTHROPIC:
+        elif model_provider is ModelProvider.ANTHROPIC or model_provider is ModelProvider.GOOGLE:
+            # Convert string to dict format if needed
+            if isinstance(tool_choice, str):
+                tool_choice_dict = {"type": tool_choice}
+            else:
+                tool_choice_dict = tool_choice
             choice, disable_parallel_tool_calls = AnthropicToolChoiceConversion.from_anthropic(
-                tool_choice  # type: ignore[arg-type]
+                tool_choice_dict  # type: ignore[arg-type]
             )
             ans.tool_choice = choice
             if disable_parallel_tool_calls is not None:
@@ -600,10 +606,15 @@ def denormalize_tools(
         or model_provider is ModelProvider.DEEPSEEK
         or model_provider is ModelProvider.XAI
         or model_provider is ModelProvider.OLLAMA
+        or model_provider is ModelProvider.GOOGLE
     ):
         denormalized_tools = [_prompt_to_openai_tool(tool) for tool in tools.tools]
         if tools.tool_choice:
-            tool_choice = OpenAIToolChoiceConversion.to_openai(tools.tool_choice)
+            if model_provider is ModelProvider.GOOGLE:
+                # Google uses Anthropic-style tool choice (any/auto/none)
+                tool_choice = AnthropicToolChoiceConversion.to_anthropic(tools.tool_choice)
+            else:
+                tool_choice = OpenAIToolChoiceConversion.to_openai(tools.tool_choice)
     elif model_provider is ModelProvider.AWS:
         denormalized_tools = [_prompt_to_bedrock_tool(tool) for tool in tools.tools]
         if tools.tool_choice:

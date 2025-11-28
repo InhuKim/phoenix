@@ -1798,7 +1798,56 @@ class GoogleStreamingClient(PlaygroundStreamingClient):
                 invocation_name="top_k",
                 label="Top K",
             ),
+            JSONInvocationParameter(
+                invocation_name="tool_choice",
+                label="Tool Choice",
+                canonical_name=CanonicalParameterName.TOOL_CHOICE,
+            ),
+            JSONInvocationParameter(
+                invocation_name="response_format",
+                label="Response Format",
+                canonical_name=CanonicalParameterName.RESPONSE_FORMAT,
+            ),
         ]
+
+    def _convert_tools_to_google_format(
+        self, tools: list[JSONScalarType]
+    ) -> list[dict[str, Any]]:
+        """Convert Phoenix tool format to Google function declarations."""
+        function_declarations = []
+        for tool in tools:
+            if isinstance(tool, dict) and "function" in tool:
+                func = tool["function"]
+                function_declarations.append({
+                    "name": func.get("name", ""),
+                    "description": func.get("description", ""),
+                    "parameters": func.get("parameters", {}),
+                })
+        return function_declarations
+
+    def _convert_tool_choice_to_google_mode(
+        self, tool_choice: JSONScalarType
+    ) -> str:
+        """Convert Phoenix tool_choice to Google function calling mode."""
+        from google.genai.types import FunctionCallingConfigMode
+
+        if isinstance(tool_choice, str):
+            if tool_choice == "auto":
+                return FunctionCallingConfigMode.AUTO
+            elif tool_choice in ["required", "any"]:
+                return FunctionCallingConfigMode.ANY
+            elif tool_choice == "none":
+                return FunctionCallingConfigMode.NONE
+        elif isinstance(tool_choice, dict):
+            choice_type = tool_choice.get("type", "auto")
+            if choice_type == "auto":
+                return FunctionCallingConfigMode.AUTO
+            elif choice_type in ["required", "any"]:
+                return FunctionCallingConfigMode.ANY
+            elif choice_type == "none":
+                return FunctionCallingConfigMode.NONE
+
+        return FunctionCallingConfigMode.AUTO
 
     async def chat_completion_create(
         self,
@@ -1808,12 +1857,39 @@ class GoogleStreamingClient(PlaygroundStreamingClient):
         tools: list[JSONScalarType],
         **invocation_parameters: Any,
     ) -> AsyncIterator[ChatCompletionChunk]:
+        import json
+        from google.genai import types
+
         contents, system_prompt = self._build_google_messages(messages)
 
         # Build config object for the new API
-        config = invocation_parameters
+        config = dict(invocation_parameters)
+
+        # Remove tool_choice and response_format from config as they need special handling
+        tool_choice = config.pop("tool_choice", None)
+        response_format = config.pop("response_format", None)
+
         if system_prompt:
             config["system_instruction"] = system_prompt
+
+        # Handle tools configuration
+        if tools:
+            function_declarations = self._convert_tools_to_google_format(tools)
+            config["tools"] = [types.Tool(function_declarations=function_declarations)]
+
+            # Handle tool_choice
+            if tool_choice:
+                mode = self._convert_tool_choice_to_google_mode(tool_choice)
+                config["tool_config"] = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(mode=mode)
+                )
+
+        # Handle response format (convert to response_schema for Google)
+        if response_format:
+            if isinstance(response_format, dict) and "json_schema" in response_format:
+                config["response_schema"] = response_format["json_schema"]["schema"]
+            elif isinstance(response_format, dict) and response_format.get("type") == "json_object":
+                config["response_mime_type"] = "application/json"
 
         # Use the client's async models.generate_content_stream method
         stream = await self.client.aio.models.generate_content_stream(
@@ -1829,6 +1905,28 @@ class GoogleStreamingClient(PlaygroundStreamingClient):
                     LLM_TOKEN_COUNT_TOTAL: event.usage_metadata.total_token_count,
                 }
             )
+
+            # Check for function calls in the response
+            if hasattr(event, "candidates") and event.candidates:
+                for candidate in event.candidates:
+                    if hasattr(candidate, "content") and candidate.content:
+                        for part in candidate.content.parts:
+                            if hasattr(part, "function_call") and part.function_call:
+                                # Generate a tool call ID (Google doesn't provide one)
+                                tool_call_id = f"call_{abs(hash(part.function_call.name))}"
+
+                                # Convert function call arguments to JSON string
+                                args_dict = dict(part.function_call.args) if part.function_call.args else {}
+                                args_json = json.dumps(args_dict)
+
+                                yield ToolCallChunk(
+                                    id=tool_call_id,
+                                    function=FunctionCallChunk(
+                                        name=part.function_call.name,
+                                        arguments=args_json,
+                                    ),
+                                )
+
             # google genai thinking returns thought tokens captured under
             # event.candidates and event.parts
             yield TextChunk(content=event.text or "")
@@ -1838,17 +1936,57 @@ class GoogleStreamingClient(PlaygroundStreamingClient):
         messages: list[tuple[ChatCompletionMessageRole, str, Optional[str], Optional[list[str]]]],
     ) -> tuple[list["ContentType"], str]:
         """Build Google messages following the standard pattern - process ALL messages."""
+        import json
+
         google_messages: list["ContentType"] = []
         system_prompts = []
-        for role, content, _tool_call_id, _tool_calls in messages:
+        for role, content, tool_call_id, tool_calls in messages:
             if role == ChatCompletionMessageRole.USER:
                 google_messages.append({"role": "user", "parts": [{"text": content}]})
             elif role == ChatCompletionMessageRole.AI:
-                google_messages.append({"role": "model", "parts": [{"text": content}]})
+                # Check if this AI message contains tool calls
+                if tool_calls:
+                    parts = []
+                    # Add text content if present
+                    if content:
+                        parts.append({"text": content})
+                    # Add function calls
+                    for tool_call in tool_calls:
+                        if isinstance(tool_call, dict) and "function" in tool_call:
+                            func = tool_call["function"]
+                            # Parse arguments from JSON string to dict
+                            args = json.loads(func.get("arguments", "{}"))
+                            parts.append({
+                                "function_call": {
+                                    "name": func.get("name", ""),
+                                    "args": args,
+                                }
+                            })
+                    google_messages.append({"role": "model", "parts": parts})
+                else:
+                    google_messages.append({"role": "model", "parts": [{"text": content}]})
             elif role == ChatCompletionMessageRole.SYSTEM:
                 system_prompts.append(content)
             elif role == ChatCompletionMessageRole.TOOL:
-                raise NotImplementedError
+                # Tool results are sent as user role with function_response
+                # Parse the content as JSON to get the result
+                try:
+                    result = json.loads(content)
+                except (json.JSONDecodeError, TypeError):
+                    result = content
+
+                # Get function name from the previous AI message's tool calls
+                # For now, we'll use a simplified approach
+                # In a real implementation, you'd need to track which function this is a response for
+                google_messages.append({
+                    "role": "user",
+                    "parts": [{
+                        "function_response": {
+                            "name": tool_call_id or "unknown_function",  # Use tool_call_id as function name
+                            "response": result,
+                        }
+                    }]
+                })
             else:
                 assert_never(role)
 
@@ -1898,6 +2036,16 @@ class Gemini25GoogleStreamingClient(GoogleStreamingClient):
             FloatInvocationParameter(
                 invocation_name="top_k",
                 label="Top K",
+            ),
+            JSONInvocationParameter(
+                invocation_name="tool_choice",
+                label="Tool Choice",
+                canonical_name=CanonicalParameterName.TOOL_CHOICE,
+            ),
+            JSONInvocationParameter(
+                invocation_name="response_format",
+                label="Response Format",
+                canonical_name=CanonicalParameterName.RESPONSE_FORMAT,
             ),
         ]
 

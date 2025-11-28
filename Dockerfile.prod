@@ -1,0 +1,85 @@
+# NURI-PHOENIX Production Dockerfile for Mac Mini (Apple Silicon)
+#
+# 빌드 방법:
+# docker build -f Dockerfile.prod -t nuri-phoenix:latest .
+#
+# 실행 방법:
+# docker-compose -f docker-compose.prod.yml up -d
+
+ARG BASE_IMAGE=gcr.io/distroless/python3-debian12:nonroot-arm64
+
+# Stage 1: Frontend 빌드
+FROM node:22-slim AS frontend-builder
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV PHOENIX_ENABLE_SOURCE_MAP=True
+
+WORKDIR /phoenix/app/
+
+# 패키지 파일 복사 및 의존성 설치
+COPY ./app/package.json ./app/pnpm-lock.yaml /phoenix/app/
+RUN npm i -g corepack && \
+    corepack enable && \
+    corepack use pnpm && \
+    pnpm install --frozen-lockfile
+
+# 소스 코드 복사 및 빌드
+COPY ./app /phoenix/app
+RUN pnpm run build
+
+# Stage 2: Backend 빌드
+FROM python:3.11-bullseye as backend-builder
+
+WORKDIR /phoenix
+
+# Python 의존성 먼저 복사 및 설치 (캐싱 최적화)
+COPY ./pyproject.toml /phoenix/
+COPY ./LICENSE /phoenix/
+COPY ./IP_NOTICE /phoenix/
+COPY ./README.md /phoenix/
+
+# 소스 코드 복사
+COPY ./src /phoenix/src
+
+# Frontend 빌드 결과물 복사
+COPY --from=frontend-builder /phoenix/src/phoenix/server/static/ /phoenix/src/phoenix/server/static/
+
+# 개발용 심볼릭 링크 제거
+RUN find src/ -xtype l -delete
+
+# Python 패키지 설치 (PostgreSQL, container 지원 포함)
+RUN pip install --no-cache-dir --target ./env ".[container, pg]"
+
+# Stage 3: Production 이미지
+FROM ${BASE_IMAGE}
+
+LABEL maintainer="NURI Team"
+LABEL description="NURI-PHOENIX - LLM Observability Platform"
+LABEL version="1.0.0"
+
+WORKDIR /phoenix
+
+# Backend 환경 복사
+COPY --from=backend-builder /phoenix/env/ ./env
+
+# 환경 변수 설정
+ENV PYTHONPATH="/phoenix/env:$PYTHONPATH"
+ENV PYTHONUNBUFFERED=1
+ENV PHOENIX_WORKING_DIR=/phoenix/data
+
+# 포트 노출
+EXPOSE 6006  # Phoenix Web UI
+EXPOSE 4317  # Phoenix gRPC (OTLP)
+EXPOSE 9090  # Prometheus metrics
+
+# 볼륨 마운트 포인트
+VOLUME ["/phoenix/data", "/phoenix/logs"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:6006').read()"
+
+# Phoenix 서버 실행
+# distroless 이미지의 ENTRYPOINT가 Python을 실행하므로 직접 Python 호출 불필요
+CMD ["-m", "phoenix.server.main", "serve"]

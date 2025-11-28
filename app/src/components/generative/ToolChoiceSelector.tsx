@@ -35,6 +35,7 @@ export const DEFAULT_TOOL_CHOICES_BY_PROVIDER = {
   OLLAMA: ["required", "auto", "none"] as const,
   ANTHROPIC: ["any", "auto", "none"] as const,
   AWS: ["any", "auto", "none"] as const,
+  GOOGLE: ["any", "auto", "none"] as const, // Google Gemini supports any, auto, none modes
 } satisfies Partial<
   Record<ModelProvider, (string | Record<string, unknown>)[]>
 >;
@@ -85,8 +86,14 @@ export const findToolChoiceType = (
       }
       return choice;
     case "GOOGLE":
-      // TODO(apowell): #5348 Add Google tool choice schema
-      return "auto";
+      if (
+        isObject(choice) &&
+        "type" in choice &&
+        typeof choice.type === "string"
+      ) {
+        return choice.type;
+      }
+      return choice;
     default:
       assertUnreachable(provider);
   }
@@ -101,7 +108,10 @@ export const findToolChoiceType = (
 export const isSupportedToolChoiceProvider = (
   provider: ModelProvider
 ): provider is keyof typeof DEFAULT_TOOL_CHOICES_BY_PROVIDER => {
-  return provider in DEFAULT_TOOL_CHOICES_BY_PROVIDER;
+  // Check if provider exists in DEFAULT_TOOL_CHOICES_BY_PROVIDER
+  const result = provider in DEFAULT_TOOL_CHOICES_BY_PROVIDER;
+  console.log(`[ToolChoiceSelector] Checking provider ${provider}:`, result, DEFAULT_TOOL_CHOICES_BY_PROVIDER);
+  return result;
 };
 
 /**
