@@ -5,12 +5,13 @@ services:
     build:
       dockerfile: ./Dockerfile.prod
       context: .
+      platforms:
+        - linux/arm64
       args:
         # Mac Mini (Apple Silicon) 용 이미지 사용
         BASE_IMAGE: gcr.io/distroless/python3-debian12:nonroot-arm64
+    platform: linux/arm64
     container_name: nuri-phoenix
-    # nonroot 사용자 (distroless 이미지의 기본 사용자 UID:GID)
-    user: "65532:65532"
     restart: unless-stopped
     depends_on:
       db:
@@ -61,6 +62,7 @@ services:
 
   db:
     image: postgres:16-alpine
+    platform: linux/arm64
     container_name: nuri-phoenix-db
     restart: unless-stopped
     environment:
@@ -85,6 +87,7 @@ services:
   # PostgreSQL 관리용 pgAdmin (선택사항)
   pgadmin:
     image: dpage/pgadmin4:latest
+    platform: linux/arm64
     container_name: nuri-phoenix-pgadmin
     restart: unless-stopped
     environment:

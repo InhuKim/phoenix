@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  phoenix:
+    build:
+      dockerfile: ./Dockerfile.prod.linux
+      context: .
+      args:
+        # Windows WSL / Linux (x86_64) 용 이미지 사용
+        BASE_IMAGE: gcr.io/distroless/python3-debian12:nonroot-amd64
+    container_name: nuri-phoenix
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "6006:6006"  # Phoenix Web UI
+      - "4317:4317"  # Phoenix gRPC (OTLP)
+    environment:
+      # PostgreSQL 연결 설정
+      - PHOENIX_SQL_DATABASE_URL=postgresql://phoenix:phoenix_password@db:5432/phoenix_db
+
+      # API Keys (필요시 .env 파일에서 로드)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+
+      # AWS Bedrock 설정 (필요시)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+
+      # Azure OpenAI 설정 (필요시)
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+
+      # Phoenix 설정
+      - PHOENIX_WORKING_DIR=/phoenix/data
+      - PHOENIX_PORT=6006
+      - PHOENIX_GRPC_PORT=4317
+
+      # 로그 레벨
+      - LOG_LEVEL=INFO
+
+    volumes:
+      # 데이터 영속성
+      - phoenix_data:/phoenix/data
+      # 로그 저장
+      - phoenix_logs:/phoenix/logs
+    networks:
+      - phoenix_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  db:
+    image: postgres:16-alpine
+    container_name: nuri-phoenix-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=phoenix
+      - POSTGRES_PASSWORD=phoenix_password
+      - POSTGRES_DB=phoenix_db
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 초기 설정 스크립트 (필요시)
+      # - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - phoenix_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U phoenix -d phoenix_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL 관리용 pgAdmin (선택사항)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: nuri-phoenix-pgadmin
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@nuri.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - phoenix_network
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
+    driver: local
+  phoenix_data:
+    driver: local
+  phoenix_logs:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  phoenix_network:
+    driver: bridge

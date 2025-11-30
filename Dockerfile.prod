@@ -20,9 +20,8 @@ WORKDIR /phoenix
 # 프론트엔드 소스 코드 복사
 COPY ./app /phoenix/app
 
-# vite.config.mts에서 outDir: ../src/phoenix/server/static로 설정되어 있음
-# 빌드 출력 디렉토리를 미리 생성해야 함
-RUN mkdir -p /phoenix/src/phoenix/server/static
+# src 디렉토리 생성 (vite.config.mts에서 outDir: ../src/phoenix/server/static로 설정되어 있음)
+RUN mkdir -p /phoenix/src/phoenix/server
 
 # 의존성 설치 및 빌드
 WORKDIR /phoenix/app
@@ -57,10 +56,6 @@ RUN find src/ -xtype l -delete
 # frontend-builder의 /phoenix/src/phoenix/server/static/에 빌드됨
 COPY --from=frontend-builder /phoenix/src/phoenix/server/static/ /phoenix/src/phoenix/server/static/
 
-# nonroot 사용자(65532)가 사용할 데이터 디렉토리 생성
-RUN mkdir -p /phoenix/data/exports /phoenix/logs && \
-    chown -R 65532:65532 /phoenix/data /phoenix/logs
-
 # Stage 3: Production 이미지
 FROM ${BASE_IMAGE}
 
@@ -70,12 +65,9 @@ LABEL version="1.0.0"
 
 WORKDIR /phoenix
 
-# Backend 환경 복사
+# Backend 환경 및 소스 코드 복사
 COPY --from=backend-builder /phoenix/env/ ./env
-
-# nonroot 사용자 권한으로 데이터 디렉토리 복사
-COPY --from=backend-builder --chown=65532:65532 /phoenix/data/ ./data/
-COPY --from=backend-builder --chown=65532:65532 /phoenix/logs/ ./logs/
+COPY --from=backend-builder /phoenix/src/ ./env/
 
 # 환경 변수 설정
 ENV PYTHONPATH="/phoenix/env:$PYTHONPATH"
@@ -83,9 +75,9 @@ ENV PYTHONUNBUFFERED=1
 ENV PHOENIX_WORKING_DIR=/phoenix/data
 
 # 포트 노출
-EXPOSE 6006
-EXPOSE 4317
-EXPOSE 9090
+EXPOSE 6006  
+EXPOSE 4317  
+EXPOSE 9090  
 
 # 볼륨 마운트 포인트
 VOLUME ["/phoenix/data", "/phoenix/logs"]
