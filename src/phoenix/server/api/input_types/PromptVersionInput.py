@@ -176,9 +176,16 @@ def to_pydantic_content_part(content_part_input: ContentPartInput) -> ContentPar
         )
     if content_part_input.tool_result is not UNSET:
         assert content_part_input.tool_result is not None
+        # Handle both string and dict inputs for tool_result
+        result = content_part_input.tool_result.result
+        if isinstance(result, str):
+            parsed_result = json.loads(result)
+        else:
+            # Already a dict/list, use as-is
+            parsed_result = result
         return ToolResultContentPart(
             type="tool_result",
             tool_call_id=content_part_input.tool_result.tool_call_id,
-            tool_result=json.loads(cast(str, content_part_input.tool_result.result)),
+            tool_result=parsed_result,
         )
     raise ValueError("content part input has no content")

@@ -1954,8 +1954,13 @@ class GoogleStreamingClient(PlaygroundStreamingClient):
                     for tool_call in tool_calls:
                         if isinstance(tool_call, dict) and "function" in tool_call:
                             func = tool_call["function"]
-                            # Parse arguments from JSON string to dict
-                            args = json.loads(func.get("arguments", "{}"))
+                            # Parse arguments - handle both string and dict formats
+                            arguments = func.get("arguments", "{}")
+                            if isinstance(arguments, str):
+                                args = json.loads(arguments)
+                            else:
+                                # Already a dict, use as-is
+                                args = arguments
                             parts.append({
                                 "function_call": {
                                     "name": func.get("name", ""),
@@ -1974,6 +1979,10 @@ class GoogleStreamingClient(PlaygroundStreamingClient):
                     result = json.loads(content)
                 except (json.JSONDecodeError, TypeError):
                     result = content
+
+                # Ensure response is always a dict (Google Gemini requirement)
+                if not isinstance(result, dict):
+                    result = {"result": result}
 
                 # Get function name from the previous AI message's tool calls
                 # For now, we'll use a simplified approach
